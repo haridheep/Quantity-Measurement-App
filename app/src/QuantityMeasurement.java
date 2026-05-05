@@ -1,14 +1,14 @@
 public class QuantityMeasurement {
 
-    enum Unit {
+    enum LengthUnit {
         FEET(1.0),
         INCH(1.0 / 12.0),
         YARD(3.0),
-        CM(0.393701 / 12.0); // cm → inches → feet
+        CM(0.393701 / 12.0);
 
         private final double toFeetFactor;
 
-        Unit(double toFeetFactor) {
+        LengthUnit(double toFeetFactor) {
             this.toFeetFactor = toFeetFactor;
         }
 
@@ -23,15 +23,15 @@ public class QuantityMeasurement {
 
     static class QuantityLength {
         private final double value;
-        private final Unit unit;
+        private final LengthUnit unit;
 
-        public QuantityLength(double value, Unit unit) {
+        public QuantityLength(double value, LengthUnit unit) {
             validate(value, unit);
             this.value = value;
             this.unit = unit;
         }
 
-        private void validate(double value, Unit unit) {
+        private void validate(double value, LengthUnit unit) {
             if (!Double.isFinite(value)) {
                 throw new IllegalArgumentException("Value must be finite");
             }
@@ -49,35 +49,58 @@ public class QuantityMeasurement {
             return Double.compare(this.toBaseUnit(), other.toBaseUnit()) == 0;
         }
 
-        // ✅ Convert this quantity to another unit
-        public double convertTo(Unit targetUnit) {
+        // ✅ Conversion
+        public double convertTo(LengthUnit targetUnit) {
             if (targetUnit == null) {
                 throw new IllegalArgumentException("Target unit must not be null");
             }
-
-            double baseValue = this.toBaseUnit();
-            double converted = targetUnit.fromBase(baseValue);
-
-            return Math.round(converted * 100000.0) / 100000.0;
+            return round(targetUnit.fromBase(this.toBaseUnit()));
         }
 
-        // ✅ Static conversion method
-        public static double convert(double value, Unit source, Unit target) {
+        public static double convert(double value, LengthUnit source, LengthUnit target) {
             if (!Double.isFinite(value)) {
                 throw new IllegalArgumentException("Value must be finite");
             }
             if (source == null || target == null) {
                 throw new IllegalArgumentException("Units must not be null");
             }
+            return round(target.fromBase(source.toBase(value)));
+        }
 
-            double base = source.toBase(value);
-            double result = target.fromBase(base);
+        // ✅ UC6: Default add (result in first unit)
+        public QuantityLength add(QuantityLength other) {
+            if (other == null) {
+                throw new IllegalArgumentException("Other quantity must not be null");
+            }
 
-            return Math.round(result * 100000.0) / 100000.0;
+            double baseSum = this.toBaseUnit() + other.toBaseUnit();
+            return new QuantityLength(round(this.unit.fromBase(baseSum)), this.unit);
+        }
+
+        // ✅ UC7: Add with target unit
+        public static QuantityLength add(QuantityLength q1, QuantityLength q2, LengthUnit targetUnit) {
+            if (q1 == null || q2 == null) {
+                throw new IllegalArgumentException("Quantities must not be null");
+            }
+            if (targetUnit == null) {
+                throw new IllegalArgumentException("Target unit must not be null");
+            }
+
+            double baseSum = q1.toBaseUnit() + q2.toBaseUnit();
+            return new QuantityLength(round(targetUnit.fromBase(baseSum)), targetUnit);
+        }
+
+        private static double round(double value) {
+            return Math.round(value * 100000.0) / 100000.0;
+        }
+
+        @Override
+        public String toString() {
+            return value + " " + unit;
         }
     }
 
-    // ✅ Comparison API (from dev branch)
+    // ✅ From dev branch
     public static boolean compare(QuantityLength q1, QuantityLength q2) {
         if (q1 == null || q2 == null) {
             throw new IllegalArgumentException("Quantities must not be null");
@@ -87,28 +110,26 @@ public class QuantityMeasurement {
 
     public static void main(String[] args) {
 
-        // 🔹 Equality checks
-        QuantityLength q1 = new QuantityLength(1.0, Unit.FEET);
-        QuantityLength q2 = new QuantityLength(12.0, Unit.INCH);
+        QuantityLength q1 = new QuantityLength(1.0, LengthUnit.FEET);
+        QuantityLength q2 = new QuantityLength(12.0, LengthUnit.INCH);
 
-        QuantityLength q3 = new QuantityLength(1.0, Unit.YARD);
-        QuantityLength q4 = new QuantityLength(3.0, Unit.FEET);
+        // UC6
+        System.out.println("Default add: " + q1.add(q2)); // 2 FEET
 
-        QuantityLength q5 = new QuantityLength(2.54, Unit.CM);
-        QuantityLength q6 = new QuantityLength(1.0, Unit.INCH);
+        // UC7
+        QuantityLength result = QuantityLength.add(q1, q2, LengthUnit.YARD);
+        System.out.println("1 ft + 12 in in yards = " + result);
 
-        System.out.println(compare(q1, q2)); // true
-        System.out.println(compare(q3, q4)); // true
-        System.out.println(compare(q5, q6)); // true
+        // Comparison
+        System.out.println("Are equal: " + compare(q1, q2));
 
-        // 🔹 Conversion tests
-        System.out.println("1 feet to inches: " +
-                q1.convertTo(Unit.INCH));
+        // Conversion
+        System.out.println("1 ft to inches: " + q1.convertTo(LengthUnit.INCH));
 
-        System.out.println("1 yard to feet: " +
-                QuantityLength.convert(1.0, Unit.YARD, Unit.FEET));
+        QuantityLength q3 = new QuantityLength(2.54, LengthUnit.CM);
+        QuantityLength q4 = new QuantityLength(1.0, LengthUnit.INCH);
 
-        System.out.println("2.54 cm to inches: " +
-                QuantityLength.convert(2.54, Unit.CM, Unit.INCH));
+        System.out.println("2.54 cm + 1 in in inches = " +
+                QuantityLength.add(q3, q4, LengthUnit.INCH));
     }
 }
