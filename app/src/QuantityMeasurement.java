@@ -1,179 +1,190 @@
-enum LengthUnit {
+// -------- COMMON INTERFACE --------
+interface IMeasurable {
+    double getConversionFactor();
+    double convertToBaseUnit(double value);
+    double convertFromBaseUnit(double baseValue);
+    String getUnitName();
+}
+
+// -------- LENGTH UNITS --------
+enum LengthUnit implements IMeasurable {
     FEET(1.0),
     INCH(1.0 / 12.0),
     YARD(3.0),
     CM(0.393701 / 12.0);
 
-    private final double toFeetFactor;
+    private final double factor;
 
-    LengthUnit(double toFeetFactor) {
-        this.toFeetFactor = toFeetFactor;
+    LengthUnit(double factor) {
+        this.factor = factor;
     }
 
-    public double toBase(double value) {
-        return value * toFeetFactor;
-    }
-
-    public double fromBase(double baseValue) {
-        return baseValue / toFeetFactor;
-    }
+    public double getConversionFactor() { return factor; }
+    public double convertToBaseUnit(double value) { return value * factor; }
+    public double convertFromBaseUnit(double baseValue) { return baseValue / factor; }
+    public String getUnitName() { return name(); }
 }
 
-enum WeightUnit {
+// -------- WEIGHT UNITS --------
+enum WeightUnit implements IMeasurable {
     KILOGRAM(1.0),
     GRAM(1.0 / 1000.0),
     POUND(0.453592);
 
-    private final double toKgFactor;
+    private final double factor;
 
-    WeightUnit(double toKgFactor) {
-        this.toKgFactor = toKgFactor;
+    WeightUnit(double factor) {
+        this.factor = factor;
     }
 
-    public double toBase(double value) {
-        return value * toKgFactor;
+    public double getConversionFactor() { return factor; }
+    public double convertToBaseUnit(double value) { return value * factor; }
+    public double convertFromBaseUnit(double baseValue) { return baseValue / factor; }
+    public String getUnitName() { return name(); }
+}
+
+// -------- VOLUME UNITS --------
+enum VolumeUnit implements IMeasurable {
+    LITRE(1.0),
+    MILLILITRE(0.001),
+    GALLON(3.78541);
+
+    private final double factor;
+
+    VolumeUnit(double factor) {
+        this.factor = factor;
     }
 
-    public double fromBase(double baseValue) {
-        return baseValue / toKgFactor;
+    public double getConversionFactor() { return factor; }
+    public double convertToBaseUnit(double value) { return value * factor; }
+    public double convertFromBaseUnit(double baseValue) { return baseValue / factor; }
+    public String getUnitName() { return name(); }
+}
+
+// -------- GENERIC QUANTITY CLASS --------
+class Quantity<U extends IMeasurable> {
+
+    private final double value;
+    private final U unit;
+
+    public Quantity(double value, U unit) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException("Value must be finite");
+        }
+        if (unit == null) {
+            throw new IllegalArgumentException("Unit must not be null");
+        }
+        this.value = value;
+        this.unit = unit;
+    }
+
+    public double toBaseUnit() {
+        return unit.convertToBaseUnit(value);
+    }
+
+    // -------- EQUALITY --------
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof Quantity<?> other)) return false;
+        if (this.unit.getClass() != other.unit.getClass()) return false;
+        return Double.compare(this.toBaseUnit(), other.toBaseUnit()) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return Double.hashCode(toBaseUnit());
+    }
+
+    // -------- CONVERSION --------
+    public Quantity<U> convertTo(U targetUnit) {
+        if (targetUnit == null) {
+            throw new IllegalArgumentException("Target unit must not be null");
+        }
+        double base = this.toBaseUnit();
+        return new Quantity<>(round(targetUnit.convertFromBaseUnit(base)), targetUnit);
+    }
+
+    // -------- ADDITION --------
+    public Quantity<U> add(Quantity<U> other) {
+        validateSameCategory(other);
+        double baseSum = this.toBaseUnit() + other.toBaseUnit();
+        return new Quantity<>(round(unit.convertFromBaseUnit(baseSum)), unit);
+    }
+
+    public Quantity<U> add(Quantity<U> other, U targetUnit) {
+        validateSameCategory(other);
+        double baseSum = this.toBaseUnit() + other.toBaseUnit();
+        return new Quantity<>(round(targetUnit.convertFromBaseUnit(baseSum)), targetUnit);
+    }
+
+    // -------- SUBTRACTION (UC12) --------
+    public Quantity<U> subtract(Quantity<U> other) {
+        validateSameCategory(other);
+        double baseDiff = this.toBaseUnit() - other.toBaseUnit();
+        return new Quantity<>(round(unit.convertFromBaseUnit(baseDiff)), unit);
+    }
+
+    public Quantity<U> subtract(Quantity<U> other, U targetUnit) {
+        validateSameCategory(other);
+        double baseDiff = this.toBaseUnit() - other.toBaseUnit();
+        return new Quantity<>(round(targetUnit.convertFromBaseUnit(baseDiff)), targetUnit);
+    }
+
+    // -------- DIVISION (UC12) --------
+    public double divide(Quantity<U> other) {
+        validateSameCategory(other);
+        double divisor = other.toBaseUnit();
+        if (divisor == 0.0) {
+            throw new ArithmeticException("Division by zero");
+        }
+        return round(this.toBaseUnit() / divisor);
+    }
+
+    // -------- VALIDATION --------
+    private void validateSameCategory(Quantity<U> other) {
+        if (other == null) {
+            throw new IllegalArgumentException("Other must not be null");
+        }
+        if (this.unit.getClass() != other.unit.getClass()) {
+            throw new IllegalArgumentException("Different measurement categories");
+        }
+    }
+
+    private static double round(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    @Override
+    public String toString() {
+        return value + " " + unit.getUnitName();
     }
 }
 
+// -------- APPLICATION --------
 public class QuantityMeasurement {
 
-    // -------- LENGTH --------
-    static class QuantityLength {
-        private final double value;
-        private final LengthUnit unit;
-
-        public QuantityLength(double value, LengthUnit unit) {
-            validate(value, unit);
-            this.value = value;
-            this.unit = unit;
-        }
-
-        private void validate(double value, LengthUnit unit) {
-            if (!Double.isFinite(value)) {
-                throw new IllegalArgumentException("Invalid length value");
-            }
-            if (unit == null) {
-                throw new IllegalArgumentException("Length unit cannot be null");
-            }
-        }
-
-        public double toBaseUnit() {
-            return unit.toBase(value);
-        }
-
-        public boolean equals(QuantityLength other) {
-            if (other == null) return false;
-            return Double.compare(this.toBaseUnit(), other.toBaseUnit()) == 0;
-        }
-
-        public QuantityLength convertTo(LengthUnit targetUnit) {
-            double base = this.toBaseUnit();
-            return new QuantityLength(round(targetUnit.fromBase(base)), targetUnit);
-        }
-
-        public QuantityLength add(QuantityLength other) {
-            double baseSum = this.toBaseUnit() + other.toBaseUnit();
-            return new QuantityLength(round(this.unit.fromBase(baseSum)), this.unit);
-        }
-
-        public static QuantityLength add(QuantityLength q1, QuantityLength q2, LengthUnit targetUnit) {
-            double baseSum = q1.toBaseUnit() + q2.toBaseUnit();
-            return new QuantityLength(round(targetUnit.fromBase(baseSum)), targetUnit);
-        }
-
-        private static double round(double v) {
-            return Math.round(v * 100000.0) / 100000.0;
-        }
-
-        public String toString() {
-            return value + " " + unit;
-        }
-    }
-
-    // -------- WEIGHT --------
-    static class QuantityWeight {
-        private final double value;
-        private final WeightUnit unit;
-
-        public QuantityWeight(double value, WeightUnit unit) {
-            validate(value, unit);
-            this.value = value;
-            this.unit = unit;
-        }
-
-        private void validate(double value, WeightUnit unit) {
-            if (!Double.isFinite(value)) {
-                throw new IllegalArgumentException("Invalid weight value");
-            }
-            if (unit == null) {
-                throw new IllegalArgumentException("Weight unit cannot be null");
-            }
-        }
-
-        public double toBaseUnit() {
-            return unit.toBase(value);
-        }
-
-        // Equality
-        public boolean equals(QuantityWeight other) {
-            if (other == null) return false;
-            return Double.compare(this.toBaseUnit(), other.toBaseUnit()) == 0;
-        }
-
-        // Conversion
-        public QuantityWeight convertTo(WeightUnit targetUnit) {
-            double base = this.toBaseUnit();
-            return new QuantityWeight(round(targetUnit.fromBase(base)), targetUnit);
-        }
-
-        // Addition (default)
-        public QuantityWeight add(QuantityWeight other) {
-            double baseSum = this.toBaseUnit() + other.toBaseUnit();
-            return new QuantityWeight(round(this.unit.fromBase(baseSum)), this.unit);
-        }
-
-        // Addition (explicit target)
-        public static QuantityWeight add(QuantityWeight q1, QuantityWeight q2, WeightUnit targetUnit) {
-            double baseSum = q1.toBaseUnit() + q2.toBaseUnit();
-            return new QuantityWeight(round(targetUnit.fromBase(baseSum)), targetUnit);
-        }
-
-        private static double round(double v) {
-            return Math.round(v * 100000.0) / 100000.0;
-        }
-
-        public String toString() {
-            return value + " " + unit;
-        }
-    }
-
-    // -------- MAIN --------
     public static void main(String[] args) {
 
-        // Length examples
-        QuantityLength l1 = new QuantityLength(1.0, LengthUnit.FEET);
-        QuantityLength l2 = new QuantityLength(12.0, LengthUnit.INCH);
+        // -------- LENGTH --------
+        Quantity<LengthUnit> l1 = new Quantity<>(10.0, LengthUnit.FEET);
+        Quantity<LengthUnit> l2 = new Quantity<>(6.0, LengthUnit.INCH);
 
-        System.out.println("Length Equal: " + l1.equals(l2));
-        System.out.println("Length Add (yards): " +
-                QuantityLength.add(l1, l2, LengthUnit.YARD));
+        System.out.println("Subtract Length: " + l1.subtract(l2)); // ~9.5 FEET
+        System.out.println("Divide Length: " + l1.divide(l2));
 
-        // Weight examples
-        QuantityWeight w1 = new QuantityWeight(1.0, WeightUnit.KILOGRAM);
-        QuantityWeight w2 = new QuantityWeight(1000.0, WeightUnit.GRAM);
+        // -------- WEIGHT --------
+        Quantity<WeightUnit> w1 = new Quantity<>(10.0, WeightUnit.KILOGRAM);
+        Quantity<WeightUnit> w2 = new Quantity<>(5.0, WeightUnit.KILOGRAM);
 
-        System.out.println("Weight Equal: " + w1.equals(w2));
+        System.out.println("Subtract Weight: " + w1.subtract(w2));
+        System.out.println("Divide Weight: " + w1.divide(w2)); // 2.0
 
-        System.out.println("1 kg to pounds: " +
-                w1.convertTo(WeightUnit.POUND));
+        // -------- VOLUME --------
+        Quantity<VolumeUnit> v1 = new Quantity<>(5.0, VolumeUnit.LITRE);
+        Quantity<VolumeUnit> v2 = new Quantity<>(2.0, VolumeUnit.LITRE);
 
-        QuantityWeight w3 = new QuantityWeight(2.0, WeightUnit.POUND);
-
-        System.out.println("Add weights (kg): " +
-                QuantityWeight.add(w1, w3, WeightUnit.KILOGRAM));
+        System.out.println("Subtract Volume: " + v1.subtract(v2));
+        System.out.println("Divide Volume: " + v1.divide(v2)); // 2.5
     }
 }
