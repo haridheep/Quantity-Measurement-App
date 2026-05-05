@@ -1,4 +1,4 @@
-class QuantityMeasurement {
+public class QuantityMeasurement {
 
     // Enum for supported units
     enum Unit {
@@ -41,10 +41,9 @@ class QuantityMeasurement {
             return unit.toFeet(value);
         }
 
-        // Equality check
+        // Equality check using Double.compare (merged idea)
         public boolean equals(QuantityLength other) {
             if (other == null) return false;
-
             return Double.compare(this.toBaseUnit(), other.toBaseUnit()) == 0;
         }
     }
@@ -57,15 +56,27 @@ class QuantityMeasurement {
         return q1.equals(q2);
     }
 
+    // Simple numeric comparison method (from main branch)
+    public boolean areEqual(Double value1, Double value2) {
+        if (value1 == null || value2 == null) {
+            throw new IllegalArgumentException("Input values must not be null");
+        }
+        return Double.compare(value1, value2) == 0;
+    }
+
     // Main method
     public static void main(String[] args) {
 
-        // Example inputs
+        // Unit-based comparison
         QuantityLength length1 = new QuantityLength(1.0, Unit.FEET);
         QuantityLength length2 = new QuantityLength(12.0, Unit.INCH);
 
-        boolean result = compare(length1, length2);
+        boolean result1 = compare(length1, length2);
+        System.out.println("Are lengths equal? " + result1);
 
-        System.out.println("Are lengths equal? " + result);
+        // Simple comparison
+        QuantityMeasurement qm = new QuantityMeasurement();
+        boolean result2 = qm.areEqual(5.0, 5.0);
+        System.out.println("Are values equal? " + result2);
     }
 }
